@@ -23,5 +23,5 @@ dat.gui.min.js <br />
 OrbitControls.js <br />
 three.min.js <br />
 
-#Warning
+# Warning
 To all the students from my university who happen to look at the project, you are now officially warned that you'll most likely be caught if you decide to copy my code and submit it as yours as most of our assignments are tested for plagiarism and saved for some period of time. 
