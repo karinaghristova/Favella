@@ -25,3 +25,5 @@ three.min.js <br />
 
 # Warning
 To all the students from my university who happen to look at the project, you are now officially warned that you'll most likely be caught if you decide to copy my code and submit it as yours as most of our assignments are tested for plagiarism and saved for some period of time. 
+
+![finishedFavella-1-82133](https://user-images.githubusercontent.com/52160729/152841234-60e00369-3f78-45c7-98a4-f5427ae5edc5.jpg)
