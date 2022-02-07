@@ -1,6 +1,6 @@
 # Favella
 This is a project I have worked on for a Computer Graphics course in university.
-The assignment was to create a favella neighborhood, which was supposed to be built like a maze. <br />
+The assignment was to create a favella neighborhood, which was supposed to look like a maze. <br />
 
 The maze contains different objects like: <br />
 •Buildings that change height and texture <br />
