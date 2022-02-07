@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./three.min.js"></script>
+	<script src="./OrbitControls.js"></script>
+    <script src="./CSG.js"></script>
+    <script src="./dat.gui.min.js"></script>
+
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        //Start of initial scene initialization
+        //Creating scene, camera and renderer
+        var scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xb0f4f5);
+            
+        var camera = new THREE.PerspectiveCamera( 60, 1, 0.01, 200 );
+        camera.position.set( 0, 20, 80 );
+        camera.lookAt( scene.position );
+
+        var renderer = new THREE.WebGLRenderer( {antialias:true} );
+        renderer.setAnimationLoop( animate );
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.VSMShadowMap;
+
+        document.body.appendChild( renderer.domElement );
+        document.body.style.margin = 0;
+        document.body.style.overflow = 'hidden';
+
+        //Creating lights
+        //Scene light
+        var sceneLight = new THREE.SpotLight( 'white', 0.7 );
+        sceneLight.position.set( 20, 190, 30 );
+        sceneLight.target = scene;
+        sceneLight.castShadow = true;
+        sceneLight.shadow.mapSize.width = 512; 
+        sceneLight.shadow.mapSize.height = 512; 
+        sceneLight.shadow.camera.near = 50; 
+        sceneLight.shadow.camera.far = 5000; 
+        sceneLight.shadow.camera.left = -50; 
+        sceneLight.shadow.camera.right = 50; 
+        sceneLight.shadow.camera.top = -50; 
+        sceneLight.shadow.camera.bottom = 50; 
+        sceneLight.shadow.bias = -0.0001; 
+        sceneLight.shadow.radius = 1;
+        scene.add( sceneLight );
+
+        //Global light
+        var ambLight = new THREE.AmbientLight( 'white', 0.2 );
+        scene.add( ambLight );
+
+        //Controls
+        var controls = new THREE.OrbitControls( camera, renderer.domElement );
+        controls.minDistance = 3;
+        controls.maxDistance = 70;
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.rotateSpeed = 0.5;
+        controls.panSpeed = 0.7;
+        controls.screenSpacePanning = false;
+        controls.target.set( 0, 0, 0 );
+        controls.update();
+        
+        //To resize when the size of a window is being changed
+        window.addEventListener( 'resize', onWindowResize, false );
+        onWindowResize();
+
+        function onWindowResize( event )
+        {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize( window.innerWidth, window.innerHeight, true );
+        }			
+
+        const COLOR_OF_BASE_PLANE =  0xcccf97;
+
+        //Creating the plane on which Favella will be built
+        function createGroundPlane() 
+        {
+            var geometry = new THREE.PlaneGeometry( 40, 40 );
+            var groundTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.WVuzw_fMgAxftC9Ym0_i4AHaFj?pid=ImgDet&rs=1');
+            var material = new THREE.MeshStandardMaterial( {
+                map:groundTexture
+            } );
+            
+            var ground = new THREE.Mesh( geometry, material );
+            ground.receiveShadow = true;
+            ground.position.y = 0;
+            ground.rotation.x = -Math.PI/2;
+
+            scene.add( ground );
+        }
+        createGroundPlane();
+        //End of initial scene initilization
+
+        //Start of creation of my Favella
+        const DEPTH_OF_MAZE_WALLS = 2;
+        const Y_POSITION = 1;
+        const HEIGHT_OF_MAZE_WALLS = 2;
+
+        //Textures:
+        var sandStoneTexture = new THREE.TextureLoader().load('https://thumbs.dreamstime.com/b/drywall-stone-texture-nuoro-sardinia-72005857.jpg');
+        var sandTexture =  new THREE.TextureLoader().load('https://th.bing.com/th/id/R.8c504f5679b4ccc83427e1069e5bd2a3?rik=J%2b%2bjNshbLO2TYA&riu=http%3a%2f%2f2.bp.blogspot.com%2f-fG-sduOnPnM%2fUjNBIu3AF_I%2fAAAAAAAAL0w%2fuxEwp8MvRoc%2fs640%2fSeamless_Beach_Sand_Texture.jpg&ehk=hKO3QwFSZtF1vvUbq1BDJ7vPaxhuUTV4xSTEL5N1Rus%3d&risl=&pid=ImgRaw&r=0');
+        var sandStoneTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.DJQrb0H0ElcL_pudBrv_nAHaFj?pid=ImgDet&rs=1');
+        
+        var mazeWallTexture = sandStoneTexture;
+
+        var blueBrickTexture =  new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.uj9l6VBTSoiYy3gxW7fqnAHaEK?pid=ImgDet&rs=1');
+        var redBrickTexture = new THREE.TextureLoader().load('https://www.outhaus.ie/wp-content/uploads/2017/10/forterra_clumber_red_red_brick-1024x640.jpg');
+        var yellowBrickTexture = new THREE.TextureLoader().load('https://i0.wp.com/gabriellegaron.com/wp-content/uploads/2019/04/mockaroon-773721-unsplash-3.jpg?fit=6000%2C4000');
+        var greenBrickTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/R.b41bacc7342459177b1d7ba8218f0ef5?rik=HFWHx%2bleys9ATg&riu=http%3a%2f%2fwww.photos-public-domain.com%2fwp-content%2fuploads%2f2012%2f05%2fgreen-brick-wall-texture.jpg&ehk=Kec2vdLBziPo6pkaE8sR2p%2fn3sKh0GP54tALrRik3zM%3d&risl=1&pid=ImgRaw&r=0');
+        var pinkBrickTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.Y0T3T19ZlcgviiRdlMWQLQHaEK?pid=ImgDet&rs=1');
+        var purpleBrickTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/R.b66fc1ee848932dafcb6d76a9dde0134?rik=JV7RUwLkHYSINQ&pid=ImgRaw&r=0')
+
+        var houseTextures = [blueBrickTexture, redBrickTexture, yellowBrickTexture, greenBrickTexture, pinkBrickTexture, purpleBrickTexture];
+
+        var treeCrownOrangeTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.Yg6qEI2HpEpncehTKuAGTgHaE7?pid=ImgDet&w=709&h=472&rs=1');
+        var treeCrownGreenTexture = new THREE.TextureLoader().load('https://images.ctfassets.net/go54bjdzbrgi/6zPehD0quQiaOCQqSAeYAG/e19431691787a6f505c43e15d2633a22/AdobeStock_47263192.jpg?w=1200&fm=jpg&q=80');
+        var treeCrownPinkTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/R.c68620d8dec052b2671a85413aeb80e1?rik=zMpru9lpB5%2b75w&pid=ImgRaw&r=0');
+        var treeCrownRedTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/R.b793cd4d9a3a81843dd3a2dec3f297c4?rik=2JIzHXSboTKL1g&pid=ImgRaw&r=0');
+        var treeCrownYellowTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/R.cf470e61546d2e53417c1d175b36cfd8?rik=Pu8NJtCwbFMBDg&riu=http%3a%2f%2fgnostic.org%2fgospel_thomas%2fsize2x3%2f083f_leaves2x3.jpg&ehk=T%2f5fJ%2fAAABYe4awbNqtXXzTUwpLJJQ7pRu3d6vzhj7I%3d&risl=&pid=ImgRaw&r=0');
+        var treeBodyTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.CF91lZqTLUuD_14rnRWB6wHaLr?pid=ImgDet&rs=1');
+        
+        var treeCrownsTextures = [treeCrownGreenTexture, treeCrownOrangeTexture, treeCrownYellowTexture, treeCrownRedTexture, treeCrownPinkTexture];
+
+        var grassTexture = new THREE.TextureLoader().load('https://simpleplantfood.com/wp-content/uploads/2020/07/20200728_112350-4-scaled.jpg');
+        var boxwoodTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.W-JQvfa1HlGFB1_jv2STOwHaE7?pid=ImgDet&rs=1');
+
+        var waterTexture = new THREE.TextureLoader().load('https://thumbs.dreamstime.com/b/water-pool-texture-blue-143546273.jpg');
+
+        var marbleTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/OIP.Eg0UKngtL_8f0feXAQMWSQHaHa?pid=ImgDet&rs=1');
+
+        var blackMetalTexture = new THREE.TextureLoader().load('https://th.bing.com/th/id/R.b612c27cb194531e1253643a5c14a309?rik=aT596IUZYzgM3g&riu=http%3a%2f%2fimages.freecreatives.com%2fwp-content%2fuploads%2f2015%2f08%2fblack-metal-texture-wallpaper.jpg&ehk=zXr60B6rJJLcEL9sF8%2fh219%2btCkHLhYiDq9Uhabn%2b7c%3d&risl=&pid=ImgRaw&r=0&sres=1&sresct=1');
+        
+        var lampLights = []; //intensity change 1-5
+        
+        //Creating an object for the whole favella
+        var favella = new THREE.Group();
+
+        //This function creates a single maze wall according to the passed arguments
+        function createMazeWall(texture, posX, posY, posZ, sizeX, sizeY, sizeZ, rotationX = 0, rotationY = 0, rotationZ = 0) {
+            var mazeWallGeometry = new THREE.BoxGeometry(0.5, 1, 1);
+
+            var mazeWallMaterial = new THREE.MeshPhongMaterial({map: texture});
+            var mazeWall = new THREE.Mesh(mazeWallGeometry, mazeWallMaterial);
+
+            //Setting the position of the mazeWall
+            mazeWall.position.set(posX, posY, posZ);
+            //Scaling the maze wall
+            mazeWall.scale.set(sizeX, sizeY, sizeZ);
+
+            //We rotate X, Y or Z only if such rotation is present in the arguments
+            if (rotationX != 0) {
+				mazeWall.rotateX(THREE.Math.degToRad(rotationX));
+			}
+
+            if (rotationY != 0) {
+				mazeWall.rotateY(THREE.Math.degToRad(rotationY));
+			}
+
+            if (rotationY != 0) {
+				mazeWall.rotateZ(THREE.Math.degToRad(rotationZ));
+			}
+
+            mazeWall.castShadow = true;
+            mazeWall.receiveShadow = true;
+            return mazeWall;
+        }
+
+        //Functions that return objects to make the creation of different objects easier
+        //The following function creates a single lath that will later be used to create a frame of a window
+        function createLath(sizeX, sizeY, sizeZ, posX, posY, posZ, yRotation = 0, zRotation = 0)
+		{
+            var frameGeometry = new THREE.BoxGeometry( 1, 0.1, 0.1 );
+			var	framematerial = new THREE.MeshPhongMaterial( {color:'white'} );
+			var frame = new THREE.Mesh(frameGeometry, framematerial);
+
+			frame.scale.set(sizeX, sizeY, sizeZ);
+			frame.position.set(posX, posY, posZ);
+			if (yRotation != 0) {
+				frame.rotateY(THREE.Math.degToRad(yRotation));
+			}
+			if (zRotation != 0) {
+				frame.rotateZ(THREE.Math.degToRad(zRotation));
+			}
+			return frame;
+		}
+        
+        //The following function creates a window glass
+        function createWindowGlass(sizeX, sizeY, sizeZ, posX, posY, posZ, yRotation = 0)
+		{
+            var windowGeometry = new THREE.BoxGeometry( 1, 1, 0.1 );
+			var	windowMaterial = new THREE.MeshPhysicalMaterial( {color:'blue', transparent: true, opacity: 0.4} );
+
+			var windowGlass = new THREE.Mesh(windowGeometry, windowMaterial);
+			windowGlass.scale.set(sizeX, sizeY, sizeZ);
+			windowGlass.position.set(posX, posY, posZ);
+
+			if (yRotation != 0) {
+				windowGlass.rotateY(THREE.Math.degToRad(yRotation));
+			}
+			return windowGlass;
+		}
+
+        //The following function creates a window with 2 glasses and 1 frame with a single lath between the glasses
+        function createWindow(sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var windowObj = new THREE.Group();
+
+            var frame1 = createLath(2, 0.5, 1, 0, 5, 0);
+            frame1.position.set(0, 2, 0);
+            var frame2 = frame1.clone();
+            frame2.position.set(0, 4, 0);
+
+            var frame3 = frame1.clone();
+            frame3.position.set(-1, 3, 0);
+            frame3.rotateY(THREE.Math.degToRad(90));
+            frame3.rotateZ(THREE.Math.degToRad(90));
+
+            var frame4 = frame3.clone();
+            frame4.position.set(1, 3, 0);
+
+            var frameMiddle = frame3.clone();
+            frameMiddle.position.set(0, 3, 0);
+
+            var windowGlass1 = createWindowGlass(1, 2, 0.4, 0, 5, 0);
+            windowGlass1.position.set(-0.5, 3, 0);
+
+            var windowGlass2 = windowGlass1.clone();
+            windowGlass2.position.set(0.5, 3, 0);
+
+            windowObj.add(frame1);
+            windowObj.add(frame2);
+            windowObj.add(frame3);
+            windowObj.add(frame4);
+            windowObj.add(frameMiddle);
+            windowObj.add(windowGlass1);
+            windowObj.add(windowGlass2);
+
+            windowObj.scale.set(sizeX, sizeY, sizeZ);
+            windowObj.position.set(posX, posY, posZ);
+
+            return windowObj;
+        }
+        
+        //The following function creates a building with 6 windows and random texture
+        function createHouse(sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var firstCube = new THREE.Mesh(new THREE.BoxGeometry(5, 10, 2), new THREE.MeshPhongMaterial());
+            firstCube.position.set(0, 5, 0);
+
+            //The following cubes will be used to cut wholes from the first one with the help of CSG
+            var secondCube = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 1), new THREE.MeshPhongMaterial());
+            secondCube.position.set(1, 5, 1);
+            var thirdCube = secondCube.clone();
+            thirdCube.position.set(-1, 5, 1);
+            var fourthCube = secondCube.clone();
+            fourthCube.position.set(1, 8, 1);
+            var fifthCube = secondCube.clone();
+            fifthCube.position.set(-1, 8, 1);
+            var sixthCube = secondCube.clone();
+            sixthCube.position.set(1, 2, 1);
+            var seventhCube = secondCube.clone();
+            seventhCube.position.set(-1, 2, 1);
+
+            var houseObj = new THREE.Group();
+
+            var csgHouse = new CSG();
+            csgHouse.subtract([firstCube, secondCube, thirdCube, fourthCube, fifthCube, sixthCube, seventhCube]);
+
+            var houseTextureNumber = Math.round(Math.random() * (houseTextures.length - 1)); //This will generate a random number so that the textures of the houses are different
+            console.log(houseTextureNumber);
+            var house = csgHouse.toMesh();
+            house.material = new THREE.MeshPhongMaterial({map: houseTextures[houseTextureNumber]});
+
+            house.position.set(0, 5, 0);
+            houseObj.add(house);
+
+            //Adding windows in the wholes that we cut so that our building is complete
+            var window1  = createWindow(0.5, 0.75, 1, 0, 5, 0);
+            window1.position.set(-1, 4.7, 1);
+            var window2 = window1.clone();
+            window2.position.set(1, 4.7, 1);
+            var window3 = window1.clone();
+            window3.position.set(-1, 7.7, 1);
+            var window4 = window1.clone();
+            window4.position.set(1, 7.7, 1);
+            var window5 = window1.clone();
+            window5.position.set(-1, 10.7, 1);
+            var window6 = window1.clone();
+            window6.position.set(1, 10.7, 1);
+
+            houseObj.add(window1);
+            houseObj.add(window2);
+            houseObj.add(window3);
+            houseObj.add(window4);
+            houseObj.add(window5);
+            houseObj.add(window6);
+
+            houseObj.scale.set(sizeX, sizeY, sizeZ);
+            houseObj.position.set(posX, posY, posZ);
+            houseObj.castShadow = true;
+
+            return houseObj;
+        }
+
+        //The following function creates a tree with random texture
+        function createTree(sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var treeObject = new THREE.Group();
+
+            var treeCrown = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 16), new THREE.MeshPhongMaterial({map: treeCrownsTextures[Math.round(Math.random() * (treeCrownsTextures.length - 1))]}));
+            treeCrown.position.set(0, 3, 0);
+            treeObject.add(treeCrown);
+
+            var treeTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.4, 3), new THREE.MeshPhongMaterial({map: treeBodyTexture}));
+            treeTrunk.position.set(0, 0, 0);
+            treeObject.add(treeTrunk);
+
+            treeObject.scale.set(sizeX, sizeY, sizeZ);
+            treeObject.position.set(posX, posY, posZ);
+            treeObject.castShadow = true;
+
+            return treeObject;
+        }
+
+        //The following function creates a staircase with 10 steps
+        function createStaircase(texture, sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var stepsObj = new THREE.Group();
+
+            for (let i = 0; i < 10; i++) {
+                stepsObj.add(createMazeWall(texture, 0, Y_POSITION + 1/2 * i, -3 + 1 * i, 10, HEIGHT_OF_MAZE_WALLS / 2 + i * HEIGHT_OF_MAZE_WALLS / 2, DEPTH_OF_MAZE_WALLS / 2));
+            }
+
+            stepsObj.rotateY(THREE.Math.degToRad(180));
+            stepsObj.scale.set(sizeX, sizeY, sizeZ);
+            stepsObj.position.set(posX, posY, posZ);
+            stepsObj.castShadow = true;
+
+            return stepsObj;
+        }
+
+        //The following function creates a river
+        function createRiver(texture, sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var riverObj = new THREE.Group();
+            var riverGeometry = new THREE.BoxGeometry( 5, 0.2, 2 );
+            var river = new THREE.Mesh(riverGeometry, new THREE.MeshPhongMaterial({map: texture}));
+
+            riverObj.add(river);
+            riverObj.scale.set(sizeX, sizeY, sizeZ);
+            riverObj.position.set(posX, posY, posZ);
+
+            return riverObj;
+        }
+
+        //The following function creates a bridge in the form of 1/2 torus
+        function createBridge(texture, sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var bridgeObj = new THREE.Group();
+
+            var torusBridge = new THREE.Mesh(new THREE.TorusGeometry(20, 3.7, 15, 10, 2.5), new THREE.MeshPhongMaterial({map: texture}));
+            torusBridge.scale.set(0.5, 0.5, 0.5);
+            torusBridge.rotateZ(THREE.Math.degToRad(19));
+            bridgeObj.add(torusBridge);
+
+            var bridgeCylinders = new THREE.Group(); //To store all cylinders
+            var bridgeCylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 2, 32), new THREE.MeshPhongMaterial({map: texture}));
+            bridgeCylinder.position.set(0, 11.7, 1.5);
+            bridgeCylinders.add(bridgeCylinder);
+
+            for (let i = 0; i < 5; i++) {
+                var bridgeCylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 2, 32), new THREE.MeshPhongMaterial({map: texture}));
+                bridgeCylinder.position.set(-1 - 1 * i, 11.7 - 0.3 * i, 1.5);
+                bridgeCylinders.add(bridgeCylinder);
+
+                var bridgeCylinder2 = bridgeCylinder.clone();
+                bridgeCylinder2.position.set(1 + 1 * i, 11.7 - 0.3 * i, 1.5);
+                bridgeCylinders.add(bridgeCylinder2);
+
+                if (i < 4) {
+                    var bridgeCylinder3 = bridgeCylinder.clone();
+                    bridgeCylinder3.position.set(-6 - 1 * i, 10.2 - 0.9 * i, 1.5);
+                    bridgeCylinders.add(bridgeCylinder3);
+
+                    var bridgeCylinder4 = bridgeCylinder.clone();
+                    bridgeCylinder4.position.set(6 + 1 * i, 10.2 - 0.9 * i, 1.5);
+                    bridgeCylinders.add(bridgeCylinder4);
+                }
+
+                if (i < 2) {
+                    var bridgeCylinder5 = bridgeCylinder.clone();
+                    bridgeCylinder5.position.set(-10 - 0.5 * i, 6.5 - 1.7 * i, 1.5);
+                    bridgeCylinders.add(bridgeCylinder5);
+
+                    var bridgeCylinder6 = bridgeCylinder.clone();
+                    bridgeCylinder6.position.set(10 + 0.5 * i, 6.5 - 1.7 * i, 1.5);
+                    bridgeCylinders.add(bridgeCylinder6);
+                }
+            }
+           
+            var secondBridgeCylinders = bridgeCylinders.clone();
+            secondBridgeCylinders.position.set(0, 0, -2.8);
+
+            bridgeObj.add(bridgeCylinders);
+            bridgeObj.add(secondBridgeCylinders);
+
+            bridgeObj.scale.set(sizeX, sizeY, sizeZ);
+            bridgeObj.position.set(posX, posY, posZ);
+            bridgeObj.castShadow = true;
+
+            return bridgeObj;
+        }
+       
+        //The following function creates a fountain with 3 levels
+        function createFountain(textureWater, textureFountain, sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var fountainObj = new THREE.Group();
+            var fountainBowlWithWaterObj = new THREE.Group();
+
+            var bigCylinder = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 1, 32), new THREE.MeshPhongMaterial());
+            var smallCylinder = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 1, 32), new THREE.MeshPhongMaterial());
+            smallCylinder.position.set(0, 0.2, 0);
+
+            var csgFountainWaterBowl = new CSG();
+            csgFountainWaterBowl.subtract([bigCylinder, smallCylinder]);
+            var fountainWaterBowlAfterCsg = csgFountainWaterBowl.toMesh();
+            fountainWaterBowlAfterCsg.material = new THREE.MeshPhongMaterial({map: textureFountain});
+            fountainBowlWithWaterObj.add(fountainWaterBowlAfterCsg);
+
+            var fountainWater = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 0.9, 32), new THREE.MeshPhongMaterial({map: textureWater}));
+            fountainBowlWithWaterObj.add(fountainWater);
+
+            var fountaingCenter = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1, 32), new THREE.MeshPhongMaterial({map: textureFountain}));
+            fountaingCenter.position.set(0, 1, 0);
+
+            var secondFountainBowlWithWater = fountainBowlWithWaterObj.clone();
+            secondFountainBowlWithWater.scale.set(0.6, 0.6, 0.6);
+            secondFountainBowlWithWater.position.set(0, 1.5, 0);
+
+            var secondFountainCenter = fountaingCenter.clone();
+            secondFountainCenter.position.set(0, 2, 0);
+
+            var thirdFountainBowlWithWater = fountainBowlWithWaterObj.clone();
+            thirdFountainBowlWithWater.scale.set(0.3, 0.3, 0.3);
+            thirdFountainBowlWithWater.position.set(0, 2.5, 0);
+
+            fountainObj.add(fountainBowlWithWaterObj);
+            fountainObj.add(fountaingCenter);
+            fountainObj.add(secondFountainBowlWithWater);
+            fountainObj.add(secondFountainCenter);
+            fountainObj.add(thirdFountainBowlWithWater);
+
+            fountainObj.scale.set(sizeX, sizeY, sizeZ);
+            fountainObj.position.set(posX, posY, posZ);
+            fountainObj.castShadow = true;
+
+            return fountainObj;
+        }
+        
+        //The following function creates a boxwood plant
+        function createBoxwood(texture, sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var boxwood = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshPhongMaterial({map: texture}));
+
+            boxwood.scale.set(sizeX, sizeY, sizeZ);
+            boxwood.position.set(posX, posY, posZ);
+            boxwood.castShadow = true;
+
+            return boxwood;
+        }
+
+        //The following function creates a street lamp
+        function createStreetLamp(texture, lightColor, sizeX, sizeY, sizeZ, posX, posY, posZ) {
+            var lampObj = new THREE.Group();
+            var lampUpperPartObj = new THREE.Group();
+
+            var streetLampBody = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 8, 32), new THREE.MeshPhongMaterial({map: texture}));
+
+            var bigCylinder =  new THREE.Mesh(new THREE.CylinderGeometry(1.5, 0.75, 1.5, 6), new THREE.MeshPhongMaterial());
+            var smallCylinder =  new THREE.Mesh(new THREE.CylinderGeometry(1.45, 0.74, 1.5, 6), new THREE.MeshPhongMaterial());
+            smallCylinder.position.set(0, 0.2, 0);
+
+            var csgLampUpperPart = new CSG();
+            csgLampUpperPart.subtract([bigCylinder, smallCylinder]);
+
+            var lampUpperPartAfterCsg = csgLampUpperPart.toMesh();
+            lampUpperPartAfterCsg.material = new THREE.MeshPhongMaterial({color: 0xb2e7f7, transparent: true, opacity: 0.4});
+
+            var lampUpperPart2 = lampUpperPartAfterCsg.clone();
+            lampUpperPart2.rotateZ(THREE.Math.degToRad(180));
+            lampUpperPart2.position.set(0, 1.5, 0);
+
+            var lamp = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 16), new THREE.MeshPhongMaterial({color: lightColor, shininess: 100, emissive: lightColor}));
+            lamp.position.set(0, 0.5, 0);
+
+            var light = new THREE.PointLight( lightColor, 0.3 , 15, 2);
+			light.position.copy( lamp.position );
+			lampLights.push( light );
+
+            var lampUpperBodyPart = new THREE.Mesh(new THREE.TorusGeometry(1, 0.1, 30, 10, Math.PI), new THREE.MeshPhongMaterial({map: texture}));
+            lampUpperBodyPart.position.set(-1, 3, 0);
+
+            lampUpperPartObj.add(lampUpperPartAfterCsg);
+            lampUpperPartObj.add(lampUpperPart2);
+            lampUpperPartObj.add(lamp);
+            lampUpperPartObj.add(light);
+
+            lampUpperPartObj.position.set(-2, 2.1, 0);
+            lampUpperPartObj.scale.set(0.4, 0.4, 0.4);
+            
+            lampObj.add(streetLampBody);
+            lampObj.add(lampUpperPartObj);
+            lampObj.add(lampUpperBodyPart);
+
+            lampObj.scale.set(sizeX, sizeY, sizeZ);
+            lampObj.position.set(posX, posY, posZ);
+            lampObj.castShadow = true;
+            return lampObj;
+        }
+
+        //Some other functions that add elements to the fragments
+        //This function adds steet lamps
+        function addBaseStreetLamps(mazeFragment) {
+                //Rightmost part
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 16, 7.5, 18));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 13.5, 5.5, 8).rotateY(THREE.Math.degToRad(90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 14.8, 3.5, 18.5));
+                //Middle part
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 3.85, 3.5, 8).rotateY(THREE.Math.degToRad(90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -5.5, 3.5, 8).rotateY(THREE.Math.degToRad(90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 6, 5.5, 5).rotateY(THREE.Math.degToRad(90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -8.5, 5.5, 7.5).rotateY(THREE.Math.degToRad(180)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -9, 7.5, 4.5).rotateY(THREE.Math.degToRad(90)));
+            
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -9.5, 5.5, -8.5).rotateY(THREE.Math.degToRad(-90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -11, 9.5, 3).rotateY(THREE.Math.degToRad(-90)));
+                //Leftmost part
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -7, 3.5, 17).rotateY(THREE.Math.degToRad(90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -24, 5.5, 16).rotateY(THREE.Math.degToRad(90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -24, 5.5, 5.5).rotateY(THREE.Math.degToRad(-90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -20.5, 7.5, 8.5).rotateY(THREE.Math.degToRad(-90)));
+            mazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -20.5, 3.5, 4.5).rotateY(THREE.Math.degToRad(-90)));
+        }
+
+        //Height of house and Y position of house according to maze level
+        var houseHeights = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]; //Heights of houses
+        var housePositionYLevel4 = [7.5, 7, 6.5, 6, 5.5, 5, 4.5, 4, 3.5, 3] //Fourth level
+        var housePositionYLevel3 = [5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5,1] //Third level
+        var housePositionYLevel2 = [3.5, 3, 2.5, 2, 1.5, 1, 0.5, 0, -0.5, -1] //Second level
+        var housePositionYLevel1 = [1.5, 1, 0.5, 0, -0.5, -1, -1.5, -2, -2.5, -3] //First level
+        
+        //Creating an object to store all maze fragments
+        var maze = new THREE.Group();
+
+        //Creating an object to store the first (also base) maze fragment
+        var baseMazeFragment = new THREE.Group();
+
+        var zPositions = [18, 14.5, 12.5, 11, 9, 7, -3, -5.7, -8.5]
+        //Start of construction of base maze fragment
+        for (let i = 0; i < 4; i++) {
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, -13 - 0.9 * i, Y_POSITION + 1 * i, zPositions[0] - 2 * i, 25 - 3.6 * i - 1, HEIGHT_OF_MAZE_WALLS + HEIGHT_OF_MAZE_WALLS * i, DEPTH_OF_MAZE_WALLS));
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, -20 - 1 * i, Y_POSITION - 1 * i + 3, zPositions[3], 8 + 8 * i, (4 * HEIGHT_OF_MAZE_WALLS) - HEIGHT_OF_MAZE_WALLS * i, (DEPTH_OF_MAZE_WALLS + (2 * i)), 0, 90));
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, -6 - 1.8 * i, Y_POSITION + 1 * i, zPositions[1] - 2 * i, 18, HEIGHT_OF_MAZE_WALLS + HEIGHT_OF_MAZE_WALLS * i, DEPTH_OF_MAZE_WALLS, 0, 90));
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, -1 - 0.8 * i, Y_POSITION + 1 * i, zPositions[4] - 2 * i, 25 + 4 * i - 1, HEIGHT_OF_MAZE_WALLS + HEIGHT_OF_MAZE_WALLS * i, DEPTH_OF_MAZE_WALLS));
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, -3.7 + 0.1 * i, Y_POSITION + 1 * i, zPositions[6] + 2 * i, 25 + 3 * i, HEIGHT_OF_MAZE_WALLS + i * HEIGHT_OF_MAZE_WALLS, DEPTH_OF_MAZE_WALLS));
+        }
+
+        for (let i = 0; i < 2; i++) {
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, 4 + 2 * i, Y_POSITION + 1 * i, zPositions[1] - 4 * i, 18 + 8 * i, HEIGHT_OF_MAZE_WALLS + HEIGHT_OF_MAZE_WALLS * i, DEPTH_OF_MAZE_WALLS, 0, 90));
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, 10 + 0.03 * i, Y_POSITION + 1 * i, zPositions[0] - 2 * i, 20 - 8 * i, HEIGHT_OF_MAZE_WALLS + HEIGHT_OF_MAZE_WALLS * i, DEPTH_OF_MAZE_WALLS));
+            baseMazeFragment.add(createMazeWall(mazeWallTexture, 14 + 2 * i, Y_POSITION + 1 + i, zPositions[2], 18 + 8 * i, HEIGHT_OF_MAZE_WALLS * (2 + i), DEPTH_OF_MAZE_WALLS, 0, 90));
+        }
+
+        baseMazeFragment.add(createMazeWall(mazeWallTexture, 14, Y_POSITION + 2, zPositions[5], 12, HEIGHT_OF_MAZE_WALLS * 3, DEPTH_OF_MAZE_WALLS));
+        baseMazeFragment.add(createMazeWall(mazeWallTexture, -9.6, Y_POSITION + 1, zPositions[7], 15, HEIGHT_OF_MAZE_WALLS * 2, DEPTH_OF_MAZE_WALLS, 0, 90));
+        baseMazeFragment.add(createMazeWall(mazeWallTexture, -6.5, Y_POSITION + 1, zPositions[8], 15, HEIGHT_OF_MAZE_WALLS * 2, DEPTH_OF_MAZE_WALLS));
+        //End of construction of base maze fragment
+
+        //Adding buildings to the first levels of the base maze fragment
+        for (let i = 0; i < 7; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -23.5 + (0.5 * 5) * i, housePositionYLevel1[randomNumber], 18));
+        }
+
+        for (let i = 0; i < 6; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -25.8, housePositionYLevel1[randomNumber], 5 + (0.5 * 5) * i).rotateY(THREE.Math.degToRad(-90)));
+        }
+
+        for (let i = 0; i < 3; i++) {
+            var randomNumber = Math.ceil(Math.random() * 6); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -5.5 + (0.5 * 5) * i, housePositionYLevel1[randomNumber], -2.8).rotateY(THREE.Math.degToRad(180)));
+        }
+
+        //Adding buildings to the second levels of the base maze fragment
+        for (let i = 0; i < 6; i++) {
+            var randomNumber = Math.ceil(Math.random() * 6); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -21.5 + (0.5 * 5) * i, housePositionYLevel2[randomNumber], 15.8));
+        }
+
+        for (let i = 0; i < 4; i++) {
+            var randomNumber = Math.ceil(Math.random() * 6); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -23.8, housePositionYLevel2[randomNumber], 7 + (0.5 * 5) * i).rotateY(THREE.Math.degToRad(-90)));
+
+            var randomNumber2 = Math.ceil(Math.random() * 6); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber2], 0.8, -4.5 + (0.5 * 5) * i, housePositionYLevel2[randomNumber2], 6.8));
+
+            var randomNumber3 = Math.ceil(Math.random() * 6); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber3], 0.8, -6.5 + (0.5 * 5) * i, housePositionYLevel2[randomNumber3], -0.8).rotateY(THREE.Math.degToRad(180)));
+        }
+
+        for (let i = 0; i < 2; i++) {
+            var randomNumber = Math.ceil(Math.random() * 6); 
+            baseMazeFragment.add( createHouse(0.5, houseHeights[randomNumber], 0.8, 6.7 + (0.5 * 5) * i, housePositionYLevel2[randomNumber], 15.8));
+        }
+
+        //Adding buildings to the third levels of the base maze fragment
+        for (let i = 0; i < 5; i++) {
+            var randomNumber = Math.ceil(Math.random() * 8); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -6.5 + (0.5 * 5) * i, housePositionYLevel3[randomNumber], 4.8));
+        }
+
+        for (let i = 0; i < 4; i++) {
+            var randomNumber = Math.ceil(Math.random() * 8); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, 16, housePositionYLevel3[randomNumber], 9 + (0.5 * 5) * i).rotateY(THREE.Math.degToRad(-90)));
+        }
+
+        for (let i = 0; i < 3; i++) {
+            var randomNumber = Math.ceil(Math.random() * 8); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, 6.2, housePositionYLevel2[randomNumber], 8.6 + (0.5 * 5) * i).rotateY(THREE.Math.degToRad(-90)));
+        }
+
+        //Adding buildings to the fourth levels of the base maze fragment
+        for (let i = 0; i < 6; i++) {
+            var randomNumber = Math.ceil(Math.random() * 10); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -8.5 + (0.5 * 5) * i, housePositionYLevel4[randomNumber], 3.2).rotateY(THREE.Math.degToRad(180)));
+        }
+
+        for (let i = 0; i < 4; i++) {
+            var randomNumber = Math.ceil(Math.random() * 10); 
+            baseMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -19 + (0.5 * 5) * i, housePositionYLevel4[randomNumber], 12.2).rotateY(THREE.Math.degToRad(180)));
+        }
+
+        //Adding vegetation to the base maze fragment
+        for (let i = 0; i < 6; i++) {
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 1.5, 1, 0.5, -4.65 + 1.5 * i, 2.5, 8));
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1.5, -12.15, 8.5, 2.8 + 1.5 * i));
+        }
+
+        for (let i = 0; i < 5; i++) {
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -7.5 + 2.4 * i, 7, 0.9));
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -19.5 + 2.4 * i, 7, 14));
+
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 1.5, 1, 0.5, 5.75 + 1.5 * i, 2.5, 17.2));
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1.5, -6.55, 2.5, 11 + 1.3 * i));
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1.5, -8.3, 4.5, 8.5 + 1.45 * i));
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1.5, 13.2, 4.5, 8.9 + 1.35 * i));
+        }
+
+        for (let i = 0; i < 4; i++) {
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -4.5 + 2.4 * i, 3, 9.7));
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, 4.5 + 2.4 * i, 3, 18.7));
+
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1.5, 4.75, 2.5, 11.5 + 1.45 * i));
+        }
+
+        for (let i = 0; i < 3; i++) {
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -7.2, 5, 9  + 2.4 * i));
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -22, 7, 9  + 2.4 * i));
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -9.5, 5, -7 + 2.4 * i));
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -11, 9, 4.5  + 2.4 * i));
+        }
+
+        for (let i = 0; i < 2; i++) {
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, 12 + 2.4 * i, 7, 7));
+            baseMazeFragment.add(createTree(0.7, 0.7, 0.7, -8 + 2.4 * i, 5, -8.5));
+
+            baseMazeFragment.add(createBoxwood(boxwoodTexture, 2.5, 1, 0.5, -23.7 + 2.35 * i, 2.5, 4.5));
+        }
+        
+        baseMazeFragment.add(createBoxwood(boxwoodTexture, 3, 1, 0.5, -21.55, 4.5, 6.8));
+        baseMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1, 4.75, 2.5, 17));
+
+        //Adding river to the base maze fragment
+        baseMazeFragment.add(createRiver(waterTexture, 1.6, 6, 4.5, -1, 0.55, 14.5));
+
+        //Adding bridge to the base maze fragment
+        baseMazeFragment.add(createBridge(mazeWallTexture, 0.45, 0.4, 0.4, -0.9, 0.5, 15));
+
+        //Adding fountains to the base maze fragment
+        baseMazeFragment.add(createFountain(waterTexture, marbleTexture, 0.3, 0.3, 0.3, 11.5, 4.1, 16));
+        baseMazeFragment.add(createFountain(waterTexture, marbleTexture, 0.3, 0.3, 0.3, -20, 8, 10));
+        baseMazeFragment.add(createFountain(waterTexture, marbleTexture, 0.3, 0.3, 0.3, -4, 4.1, -8.5));
+
+        //Adding steps to the base maze fragment
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, -6.3, 1.9, 9.3));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, -7.3, 3.9, 6.5).rotateY(THREE.Math.degToRad(90)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, -10, 5.9, 5.3));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, 4.5, 1.9, 9.3));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, 13.7, 1.9, 17.5).rotateY(THREE.Math.degToRad(-90)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, 14.5, 3.9, 9.3));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -19.5, 1.9, 4.35).rotateY(THREE.Math.degToRad(180)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -19.5, 3.9, 6.35).rotateY(THREE.Math.degToRad(180)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -19.5, 5.9, 8.35).rotateY(THREE.Math.degToRad(180)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -18.4, -0.1, 3.5).rotateY(THREE.Math.degToRad(90)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -8.1, 1.9, -2.65).rotateY(THREE.Math.degToRad(180)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -9, 3.9, -0.6).rotateY(THREE.Math.degToRad(180)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -10, 5.9, 1.4).rotateY(THREE.Math.degToRad(180)));
+        baseMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -7.95, -0.1, -4.5).rotateY(THREE.Math.degToRad(90)));
+
+        //Just touching it up a little bit so that all fragments fit better on the ground
+        baseMazeFragment.scale.set(0.5, 0.5, 0.5);
+        baseMazeFragment.position.set(11, 0, 10);
+
+        //CREATING SECOND MAZE FRAGMENT
+        var secondMazeFragment = baseMazeFragment.clone();
+        secondMazeFragment.position.set(-10, 0, 12);
+        secondMazeFragment.rotateY(THREE.Math.degToRad(180));
+        
+        //Adding additional maze walls to the second maze fragment
+        zPosition = -3;
+        secondMazeFragment.add(createMazeWall(mazeWallTexture, 16, Y_POSITION + 1, zPosition, 40, HEIGHT_OF_MAZE_WALLS * 2, DEPTH_OF_MAZE_WALLS, 0, 90));
+        secondMazeFragment.add(createMazeWall(mazeWallTexture, 14, Y_POSITION, zPosition + 0.8, 35, HEIGHT_OF_MAZE_WALLS, DEPTH_OF_MAZE_WALLS, 0, 90));
+        secondMazeFragment.add(createMazeWall(mazeWallTexture, 9, Y_POSITION + 1, zPosition - 9, 30, HEIGHT_OF_MAZE_WALLS * 2, DEPTH_OF_MAZE_WALLS));
+        secondMazeFragment.add(createMazeWall(mazeWallTexture, 5.2, Y_POSITION + 2, zPosition - 6.5, 15, HEIGHT_OF_MAZE_WALLS * 3, DEPTH_OF_MAZE_WALLS * 1.5));
+
+        //Adding buildings to the first level of the second maze fragment
+        for (let i = 0; i < 6; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            secondMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, 14.2, housePositionYLevel1[randomNumber], -9.8 + (0.5 * 5) * i).rotateY(THREE.Math.degToRad(-90)));
+        }
+
+        //Adding buildings to the third level of the second maze fragment
+        for (let i = 0; i < 3; i++) {
+            var randomNumber = Math.ceil(Math.random() * 6); 
+            secondMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, 2.65 + (0.5 * 5) * i, housePositionYLevel3[randomNumber], -9 ).rotateY(THREE.Math.degToRad(180)));
+        }
+
+        //Adding vegetation to the second maze fragment
+        for (let i = 0; i < 7; i++) {
+            secondMazeFragment.add(createTree(0.7, 0.7, 0.7, 16 , 4.5, 3.5 - 2.4 * i));
+        }
+
+        for (let i = 0; i < 5; i++) {
+            secondMazeFragment.add(createTree(0.7, 0.7, 0.7, 14 - 2.4 * i, 4.5, -12));
+        }
+
+        //Adding steps to the second maze fragment
+        secondMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, 2, 3.9, -12.2).rotateY(THREE.Math.degToRad(180)));
+        secondMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, 16.45, 3.9, 4.8).rotateY(THREE.Math.degToRad(180)));
+        secondMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, 13.9, 1.9, 5.5).rotateY(THREE.Math.degToRad(-90)));
+        secondMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.2, 11.9, 0.1, 5.5).rotateY(THREE.Math.degToRad(-90)));
+
+        //Adding lights to the second maze fragment
+        secondMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 8.5, 7.5, -10.5).rotateY(THREE.Math.degToRad(-90)));
+        secondMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 1.5, 7.5, -10.5).rotateY(THREE.Math.degToRad(-90)));
+        secondMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 15.5, 5.5, -12.2).rotateY(THREE.Math.degToRad(-90)));
+        secondMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 14, 3.5, 4.5));
+        secondMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 2, 3.5, -3).rotateY(THREE.Math.degToRad(-90)));
+        secondMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 3, 5.5, -1).rotateY(THREE.Math.degToRad(-90)));
+        secondMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 4, 7.5, 1).rotateY(THREE.Math.degToRad(-90)));
+
+        //CREATING THIRD MAZE FRAGMENT
+        var thirdMazeFragment = baseMazeFragment.clone();
+        thirdMazeFragment.position.set(10, 0, -8);
+        thirdMazeFragment.rotateY(THREE.Math.degToRad(90));
+
+        //Adding additional maze walls to the third maze fragment
+        zPosition = 18;
+        thirdMazeFragment.add(createMazeWall(mazeWallTexture, -30, Y_POSITION, zPosition, 20, HEIGHT_OF_MAZE_WALLS, DEPTH_OF_MAZE_WALLS));
+        thirdMazeFragment.add(createMazeWall(mazeWallTexture, -34, Y_POSITION, zPosition - 5, 20, HEIGHT_OF_MAZE_WALLS, DEPTH_OF_MAZE_WALLS, 0, 90));
+        thirdMazeFragment.add(createMazeWall(mazeWallTexture, -13.5, Y_POSITION + 2, zPosition - 17, 10, HEIGHT_OF_MAZE_WALLS * 3, DEPTH_OF_MAZE_WALLS));
+        thirdMazeFragment.add(createMazeWall(mazeWallTexture, -17, Y_POSITION + 3, zPosition - 23.5, 30, HEIGHT_OF_MAZE_WALLS * 4, DEPTH_OF_MAZE_WALLS, 0, 90));
+
+        //Adding buildings to the first level of the third maze fragment
+        for (let i = 0; i < 4; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            thirdMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -34.3, housePositionYLevel1[randomNumber], 9.9 + (0.5 * 5) * i).rotateY(THREE.Math.degToRad(90)));
+        }
+
+        //Adding buildings to the fourth level of the third maze fragment
+        for (let i = 0; i < 6; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            thirdMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -17.2, housePositionYLevel4[randomNumber], 0.75 - (0.5 * 5) * i).rotateY(THREE.Math.degToRad(90)));
+        }
+
+        //Adding vegetation to the third maze fragment
+        for (let i = 0; i < 3; i++) {
+            thirdMazeFragment.add(createTree(0.7, 0.7, 0.7, -32.5 + 2.4 * i, 3, 18.7));
+        }
+
+        //Adding steps to the third maze fragment
+        thirdMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, -15.35, 5.9, 1.4).rotateY(THREE.Math.degToRad(90)));
+
+        //Adding lights to the third maze fragment
+        thirdMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, -15.4, 7.5, 0.5).rotateY(THREE.Math.degToRad(180)));
+        thirdMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 2, 3.5, -3).rotateY(THREE.Math.degToRad(-90)));
+        thirdMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 3, 5.5, -1).rotateY(THREE.Math.degToRad(-90)));
+        thirdMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 4, 7.5, 1).rotateY(THREE.Math.degToRad(-90)));
+
+        //CREATING FOURTH MAZE FRAGMENT
+        var fourthMazeFragment = baseMazeFragment.clone();
+        fourthMazeFragment.position.set(-9, 0, -6);
+        fourthMazeFragment.rotateY(THREE.Math.degToRad(-90));
+
+        //Adding additional maze walls to the fourth maze fragment
+        zPosition = 0;
+        for (let i = 0; i < 4; i++) {
+            fourthMazeFragment.add(createMazeWall(mazeWallTexture, 6 + 2 * i, Y_POSITION + (3 - i), zPosition - 3.5 - i, 30 - 4 * i, HEIGHT_OF_MAZE_WALLS * (4 - i), DEPTH_OF_MAZE_WALLS, 0, 90));
+        }
+
+        for (let i = 0; i < 3; i++) {
+            fourthMazeFragment.add(createMazeWall(mazeWallTexture, 4 - 2 * i, Y_POSITION + (2 - i), zPosition - 3.5 - i, 30 - 4 * i, HEIGHT_OF_MAZE_WALLS * (3 - i), DEPTH_OF_MAZE_WALLS, 0, 90));
+        }
+
+        //Adding buildings to the first level of the fourth maze fragmnet
+        for (let i = 0; i < 2; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            fourthMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, 11.95, housePositionYLevel1[randomNumber], -4.5 - (0.5 * 5) * i).rotateY(THREE.Math.degToRad(90)));
+        }
+
+        //Adding buildings to the second level of the fourth maze fragmnet
+        for (let i = 0; i < 3; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            fourthMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, 9.95, housePositionYLevel2[randomNumber], -2.5 - (0.5 * 5) * i).rotateY(THREE.Math.degToRad(90)));
+        }
+
+        //Adding buildings to the third level of the fourth maze fragmnet
+        for (let i = 0; i < 4; i++) {
+            var randomNumber = Math.ceil(Math.random() * 6); 
+            var randomNumber2 = Math.ceil(Math.random() * 6); 
+            fourthMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, 4.25, housePositionYLevel3[randomNumber], -0.6 - (0.5 * 5) * i).rotateY(THREE.Math.degToRad(-90)));
+            fourthMazeFragment.add(createHouse(0.5, houseHeights[randomNumber2], 0.8, 7.95, housePositionYLevel3[randomNumber2], -0.3 - (0.5 * 5) * i).rotateY(THREE.Math.degToRad(90)));
+        }
+
+        //Adding vegetation to the fourth maze fragment
+        for (let i = 0; i < 6; i++) {
+            fourthMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1.5, 2.7, 4.5, -1.25 - 1.5 * i));
+        }
+
+        for (let i = 0; i < 5; i++) {
+            fourthMazeFragment.add(createTree(0.7, 0.7, 0.7, 6, 9, 0 -2.4 * i));
+        }
+
+        for (let i = 0; i < 4; i++) {
+            fourthMazeFragment.add(createBoxwood(boxwoodTexture, 0.5, 1, 1.5, 1, 2.3, -4.25 - 1.5 * i));
+        }
+
+        //Adding steps to the fourth maze fragment
+        fourthMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, 11.65, 1.9, -10.5).rotateY(THREE.Math.degToRad(90)));
+        fourthMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, 9.65, 3.9, -10.5).rotateY(THREE.Math.degToRad(90)));
+        fourthMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, 7.65, 5.9, -10.5).rotateY(THREE.Math.degToRad(90)));
+        fourthMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, 0.4, 1.9, -10.5).rotateY(THREE.Math.degToRad(-90)));
+        fourthMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, 2.4, 3.9, -10.5).rotateY(THREE.Math.degToRad(-90)));
+        fourthMazeFragment.add(createStaircase(mazeWallTexture, 0.2, 0.2, 0.1, 4.4, 5.9, -10.5).rotateY(THREE.Math.degToRad(-90)));
+
+        //Adding lights to the fourth maze fragment
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 2.5, 5.5, -1).rotateY(THREE.Math.degToRad(-90)));
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 3.5, 7.5, 1).rotateY(THREE.Math.degToRad(-90)));
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 0.8, 3.5, -9.5));
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 2.7, 5.5, -9.5));
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 4.6, 7.5, -9.5));
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 11.5, 3.5, -9.5).rotateY(THREE.Math.degToRad(180)));
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 9.6, 5.5, -9.5).rotateY(THREE.Math.degToRad(180)));
+        fourthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 7.5, 7.5, -9.5).rotateY(THREE.Math.degToRad(180)));
+
+        //CREATING FIFTH MAZE FRAGMENT
+        var fifthMazeFragment = baseMazeFragment.clone();
+        fifthMazeFragment.position.set(-1.25, 0, -10);
+        fifthMazeFragment.rotateY(THREE.Math.degToRad(180));
+
+        //Adding additional maze walls to the fifth maze fragment
+        fifthMazeFragment.add(createMazeWall(mazeWallTexture, -2, Y_POSITION + 1, zPosition - 12.5, 20, HEIGHT_OF_MAZE_WALLS * 2, DEPTH_OF_MAZE_WALLS, 0, 90));
+
+        //Adding buildings to the second level of the fifth maze fragment
+        for (let i = 0; i < 4; i++) {
+            var randomNumber = Math.ceil(Math.random() * 4); 
+            fifthMazeFragment.add(createHouse(0.5, houseHeights[randomNumber], 0.8, -1.90, housePositionYLevel2[randomNumber], -8.5 - (0.5 * 5) * i).rotateY(THREE.Math.degToRad(-90)));
+        }
+
+        //Adding lights to the fifth maze fragment
+        fifthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 2, 3.5, -3).rotateY(THREE.Math.degToRad(-90)));
+        fifthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 2.5, 5.5, -1).rotateY(THREE.Math.degToRad(-90)));
+        fifthMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 3.5, 7.5, 1).rotateY(THREE.Math.degToRad(-90)));
+
+        //Adding street lamps with fixed positions to all maze fragments
+        addBaseStreetLamps(baseMazeFragment);
+        addBaseStreetLamps(secondMazeFragment);
+        addBaseStreetLamps(thirdMazeFragment);
+        addBaseStreetLamps(fourthMazeFragment);
+        addBaseStreetLamps(fifthMazeFragment);
+
+        //Adding additonal lights to the base maze fragment
+        baseMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 2, 3.5, -3).rotateY(THREE.Math.degToRad(-90)));
+        baseMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 3, 5.5, -1).rotateY(THREE.Math.degToRad(-90)));
+        baseMazeFragment.add(createStreetLamp(blackMetalTexture, 'white', 0.4, 0.4, 0.4, 4, 7.5, 1).rotateY(THREE.Math.degToRad(-90)));
+
+        //Adding all maze fragments to the maze object
+        maze.add(baseMazeFragment);
+        maze.add(secondMazeFragment);
+        maze.add(thirdMazeFragment);
+        maze.add(fourthMazeFragment);
+        maze.add(fifthMazeFragment);
+
+        //Adding the maze to the favella object
+        favella.add(maze);
+
+        //Adding the favella object to the scene
+        scene.add(favella);
+
+        //Interactive panel creation start
+		dat.GUI.TEXT_CLOSED = 'Close panel';
+		dat.GUI.TEXT_OPEN = 'Open panel';
+
+        var params = {color: [255,255,255], intensity: 0.2};
+        var params2 = {color: [255,255,255], intensity: 0.5};
+        var params3 = {checkbox: false}; 
+
+        var interactivePanel = new dat.GUI();
+
+		interactivePanel.add( params, 'intensity', 0, 1 ).name( 'Intensity str. lights');
+		interactivePanel.addColor( params, 'color' ).name( 'Color str. lights');
+        interactivePanel.add( params2, 'intensity', 0, 1 ).name( 'Intensity scene light ');
+		interactivePanel.addColor( params2, 'color' ).name( 'Color scene light');
+        interactivePanel.add(params3, 'checkbox').name('Night mode').onChange(function (value) 
+        { 
+            if (value == true) {
+                scene.background = new THREE.Color(0x2b2759);
+            }else{
+                scene.background = new THREE.Color(0xb0f4f5);
+            }
+        });
+        //End of interactive panel creation
+
+        function animate( time )
+        {
+            controls.update( time );
+            renderer.render( scene, camera );
+
+            for( var i=0; i< lampLights.length; i++ )
+			{
+				//Change color and intensity of street lights according to the values in the interactive panel
+			    lampLights[i].color.setRGB( params.color[0]/255, params.color[1]/255, params.color[2]/255 );
+                lampLights[i].intensity = params.intensity;
+			}
+
+            //Change color and intensity of scene light according to the values in the interactive panel
+            sceneLight.color.setRGB( params2.color[0]/255, params2.color[1]/255, params2.color[2]/255 );
+            sceneLight.intensity = params2.intensity;
+        }
+        
+    </script>
+</body>
+</html>
